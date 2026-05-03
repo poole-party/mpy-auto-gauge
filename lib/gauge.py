@@ -1,5 +1,5 @@
 import math
-import st7789
+import st7789py as st7789
 from temperature import Temperature
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -7,16 +7,61 @@ from temperature import Temperature
 BOOST_OFFSET        = 13.88
 MAX_BOOST           = 10
 MAX_VACUUM          = 15
-MAX_TEMP            = 300
-MIN_TEMP            = 180
+MAX_TEMP            = 320
+MIN_TEMP            = 140
 DANGER_TEMP_START   = 285
 CAUTION_TEMP_START  = 270
-OP_TEMP_START       = 200
+OP_TEMP_START       = 160
 SAMPLE_SIZE         = 50
 GAP_RATIO           = 0.6   # controls visual gap between arc segments
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fill_polygon(display, points, color):
+    """Scanline fill for a convex polygon. Replaces russhughes filled polygon."""
+    min_y = min(p[1] for p in points)
+    max_y = max(p[1] for p in points)
+    n = len(points)
+    for y in range(min_y, max_y + 1):
+        xs = []
+        for i in range(n):
+            x0, y0 = points[i]
+            x1, y1 = points[(i + 1) % n]
+            if y0 == y1:
+                continue
+            if min(y0, y1) <= y < max(y0, y1):
+                xs.append(x0 + (y - y0) * (x1 - x0) // (y1 - y0))
+        if len(xs) >= 2:
+            xs.sort()
+            display.hline(xs[0], y, xs[-1] - xs[0] + 1, color)
+
+
+def _draw_text(display, font, text, x, y, fg, bg):
+    """Render text using a Peter Hinch font_to_py font module via blit_buffer."""
+    if display.needs_swap:
+        fg_hi, fg_lo = fg & 0xFF, fg >> 8
+        bg_hi, bg_lo = bg & 0xFF, bg >> 8
+    else:
+        fg_hi, fg_lo = fg >> 8, fg & 0xFF
+        bg_hi, bg_lo = bg >> 8, bg & 0xFF
+    for ch in text:
+        bitmap, height, width = font.get_ch(ch)
+        bpr = (width - 1) // 8 + 1
+        buf = bytearray(width * height * 2)
+        for row in range(height):
+            for col in range(width):
+                bit = (bitmap[row * bpr + col // 8] >> (7 - col % 8)) & 1
+                i = (row * width + col) * 2
+                if bit:
+                    buf[i] = fg_hi
+                    buf[i + 1] = fg_lo
+                else:
+                    buf[i] = bg_hi
+                    buf[i + 1] = bg_lo
+        display.blit_buffer(bytes(buf), x, y, width, height)
+        x += width
+
 
 def _segment_polygon(origin_x, origin_y, radius, arc_width, angle_start, segment_index,
                      segment_count, spread):
@@ -86,8 +131,6 @@ class Gauge:
         self.secondary_segments   = secondary_segments
         self.secondary_color_index = secondary_color_index
 
-        # Load fonts (russhughes driver accepts module references or path strings)
-        import st7789
         self.font_major = font_major
         self.font_minor = font_minor
         self.font_mini  = font_mini
@@ -97,7 +140,7 @@ class Gauge:
 
         self._primary_polys = [
             _segment_polygon(ox, oy, radius, arc_width,
-                             angles['start'], i, primary_segments, angles['spread'])
+                             angles['start'], primary_segments - 1 - i, primary_segments, angles['spread'])
             for i in range(primary_segments)
         ]
         self._primary_colors = [primary_color_index] * primary_segments
@@ -117,6 +160,7 @@ class Gauge:
         self._bar_level    = 0
         self._temp_level   = -1
         self._mdp_current  = None
+        self._last_major_x = None
 
         # Draw static elements (units label) once at init
         self._draw_units()
@@ -124,7 +168,8 @@ class Gauge:
     # ── Drawing primitives ────────────────────────────────────────────────────
 
     def _draw_units(self):
-        self.display.text(
+        _draw_text(
+            self.display,
             self.font_mini,
             self.gauge_text['units'],
             self.readout_pos['x_units'],
@@ -146,31 +191,35 @@ class Gauge:
 
         self._primary_visible[index] = visible
         color = self.palette[self._primary_colors[index]] if visible else st7789.BLACK
-        self.display.polygon(self._primary_polys[index], 0, 0, color, True, 0, 0)
+        _fill_polygon(self.display, self._primary_polys[index], color)
 
     def _set_secondary_segment(self, index, visible):
         if visible == self._secondary_visible[index]:
             return
         self._secondary_visible[index] = visible
         color = self.palette[self._secondary_colors[index]] if visible else st7789.BLACK
-        self.display.polygon(self._secondary_polys[index], 0, 0, color, True, 0, 0)
+        _fill_polygon(self.display, self._secondary_polys[index], color)
 
     def _draw_readout(self, major_text, minor_text=None):
         rp = self.readout_pos
-        self.display.text(
-            self.font_major,
-            major_text,
-            rp['x'],
-            rp['y'],
-            self.palette[16],
-            st7789.BLACK,
-        )
+        font = self.font_major
+        total_w = sum(font.get_ch(ch)[2] for ch in major_text)                                                                                                                   
+        x_start = rp['x'] - total_w                                                                                                                                            
+        y_start = rp['y'] - font.height()                                                                                                                                        
+        # Erase leftover pixels when a wider string shrinks                                                                                                                    
+        if self._last_major_x is not None and self._last_major_x < x_start:                                                                                                    
+            self.display.fill_rect(self._last_major_x, y_start,                                                                                                                  
+                                   x_start - self._last_major_x, font.height(), st7789.BLACK)                                                                                    
+        self._last_major_x = x_start                                                                                                                                             
+        _draw_text(self.display, font, major_text, x_start, y_start,
+                   self.palette[16], st7789.BLACK)
         if minor_text is not None and self.font_minor:
-            self.display.text(
+            _draw_text(
+                self.display,
                 self.font_minor,
                 minor_text,
                 rp['x_minor'],
-                rp['y'],
+                rp['y'] - self.font_minor.height(),
                 self.palette[16],
                 st7789.BLACK,
             )
@@ -193,7 +242,7 @@ class Gauge:
             if not hasattr(self, '_test_value'):
                 self._test_value = 0
             mdp_next = (self._test_value - 150) / 10
-            self._test_value = (self._test_value + 2) % 251
+            self._test_value = (self._test_value + 4) % 251
         else:
             mdp_next = value / 1000 - BOOST_OFFSET
 
@@ -258,8 +307,13 @@ class Gauge:
         if options.get('demo'):
             if not hasattr(self, '_test_value'):
                 self._test_value = 0
-            self._test_value = (self._test_value + 2) % MIN_TEMP
-            temp = self._test_value + 145
+
+            self._test_value = (self._test_value + 2) % MAX_TEMP
+            temp = self._test_value
+            
+            if temp < MIN_TEMP:
+                self._test_value = MIN_TEMP
+                temp = self._test_value
         else:
             temp = Temperature.lookup(value, options.get('units', 'f'))
 

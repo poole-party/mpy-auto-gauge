@@ -1,8 +1,12 @@
 import math
 import machine
-import st7789
+import st7789py as st7789
 import time
 from gauge import Gauge
+
+import fonts.saira_bold_italic_56 as font_56
+import fonts.saira_bold_italic_43 as font_43
+import fonts.saira_semibold_20 as font_20
 
 # ── SPI & display init ────────────────────────────────────────────────────────
 
@@ -71,11 +75,9 @@ PALETTE = [
 
 # ── Gauge definitions ─────────────────────────────────────────────────────────
 
-# Font paths — adjust if your converted font files live elsewhere.
-# See README for converting Saira .bdf → russhughes font format.
-FONT_MAJOR = "fonts/saira_bold_italic_56"
-FONT_MINOR = "fonts/saira_bold_italic_43"
-FONT_MINI  = "fonts/saira_semibold_20"
+FONT_MAJOR = font_56
+FONT_MINOR = font_43
+FONT_MINI  = font_20
 
 active_gauges = []
 
@@ -89,17 +91,17 @@ active_gauges.append(Gauge(
     radius        = 135,
     arc_width     = 32,
     angles        = {'start': 45, 'spread': 90, 'secondary_spread': 45},
-    primary_segments       = 6,
+    primary_segments       = 10,
     primary_color_index    = 1,
     secondary              = True,
-    secondary_segments     = 3,
+    secondary_segments     = 5,
     secondary_color_index  = 15,
     readout_pos   = {
         'x': DISPLAY_WIDTH - 60,
         'y': DISPLAY_HEIGHT // 2 - 9,
         'x_minor': DISPLAY_WIDTH - 64,
-        'x_units': DISPLAY_WIDTH // 2 + 15,
-        'y_units': DISPLAY_HEIGHT // 2 - 80,
+        'x_units': DISPLAY_WIDTH // 2,
+        'y_units': DISPLAY_HEIGHT // 2 - 95,
     },
     font_major = FONT_MAJOR,
     font_minor = FONT_MINOR,
@@ -116,13 +118,13 @@ active_gauges.append(Gauge(
     radius        = 135,
     arc_width     = 32,
     angles        = {'start': 45, 'spread': 135},
-    primary_segments      = 10,
+    primary_segments      = 15,
     primary_color_index   = 1,
     readout_pos   = {
         'x': DISPLAY_WIDTH - 6,
-        'y': DISPLAY_HEIGHT - 10,
-        'x_units': DISPLAY_WIDTH // 2 + 15,
-        'y_units': DISPLAY_HEIGHT - 80,
+        'y': DISPLAY_HEIGHT - 5,
+        'x_units': DISPLAY_WIDTH // 2,
+        'y_units': DISPLAY_HEIGHT - 95,
     },
     font_major = FONT_MAJOR,
     font_mini  = FONT_MINI,
