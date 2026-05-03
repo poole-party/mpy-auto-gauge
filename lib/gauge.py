@@ -160,7 +160,9 @@ class Gauge:
         self._bar_level    = 0
         self._temp_level   = -1
         self._mdp_current  = None
-        self._last_major_x = None
+        self._last_major_x    = None
+        self._last_minor_end  = None
+        self._minor_dot_drawn = False
 
         # Draw static elements (units label) once at init
         self._draw_units()
@@ -203,26 +205,43 @@ class Gauge:
     def _draw_readout(self, major_text, minor_text=None):
         rp = self.readout_pos
         font = self.font_major
-        total_w = sum(font.get_ch(ch)[2] for ch in major_text)                                                                                                                   
-        x_start = rp['x'] - total_w                                                                                                                                            
-        y_start = rp['y'] - font.height()                                                                                                                                        
-        # Erase leftover pixels when a wider string shrinks                                                                                                                    
-        if self._last_major_x is not None and self._last_major_x < x_start:                                                                                                    
-            self.display.fill_rect(self._last_major_x, y_start,                                                                                                                  
-                                   x_start - self._last_major_x, font.height(), st7789.BLACK)                                                                                    
-        self._last_major_x = x_start                                                                                                                                             
+
+        # Pre-compute minor layout and clear rightover digit pixels before anything is drawn
+        if minor_text is not None and self.font_minor:
+            font_m   = self.font_minor
+            y_minor  = rp['y'] - font_m.height() - 3
+            _, _, dot_w  = font_m.get_ch(minor_text[0])
+            x_digit      = rp['x_minor'] + dot_w
+            digit_text   = minor_text[1:]
+            digit_w      = sum(font_m.get_ch(ch)[2] for ch in digit_text)
+            x_digit_end  = x_digit + digit_w
+            if self._last_minor_end is not None and self._last_minor_end > x_digit_end:
+                self.display.fill_rect(x_digit_end, y_minor,
+                                       self._last_minor_end - x_digit_end, font_m.height(), st7789.BLACK)
+            self._last_minor_end = x_digit_end
+
+        # Major text (right-aligned, bottom-anchored)
+        total_w = sum(font.get_ch(ch)[2] for ch in major_text)
+        x_start = rp['x'] - total_w
+        y_start = rp['y'] - font.height()
+
+        if self._last_major_x is not None and self._last_major_x < x_start:
+            self.display.fill_rect(self._last_major_x, y_start,
+                                   x_start - self._last_major_x, font.height(), st7789.BLACK)
+
+        self._last_major_x = x_start
         _draw_text(self.display, font, major_text, x_start, y_start,
                    self.palette[16], st7789.BLACK)
+
+        # Minor text: dot drawn once on first call; only proceeding digits redrawn each call
         if minor_text is not None and self.font_minor:
-            _draw_text(
-                self.display,
-                self.font_minor,
-                minor_text,
-                rp['x_minor'],
-                rp['y'] - self.font_minor.height(),
-                self.palette[16],
-                st7789.BLACK,
-            )
+            if not self._minor_dot_drawn:
+                _draw_text(self.display, font_m, minor_text, rp['x_minor'], y_minor,
+                           self.palette[16], st7789.BLACK)
+                self._minor_dot_drawn = True
+            else:
+                _draw_text(self.display, font_m, digit_text, x_digit, y_minor,
+                           self.palette[16], st7789.BLACK)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
