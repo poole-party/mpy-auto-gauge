@@ -97,9 +97,9 @@ active_gauges.append(Gauge(
     secondary_segments     = 5,
     secondary_color_index  = 15,
     readout_pos   = {
-        'x': DISPLAY_WIDTH - 44,
+        'x': DISPLAY_WIDTH - 46,
         'y': DISPLAY_HEIGHT // 2 - 9,
-        'x_minor': DISPLAY_WIDTH - 46,
+        'x_minor': DISPLAY_WIDTH - 48,
         'x_units': DISPLAY_WIDTH // 2,
         'y_units': DISPLAY_HEIGHT // 2 - 95,
     },
