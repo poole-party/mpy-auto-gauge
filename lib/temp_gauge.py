@@ -19,7 +19,7 @@ def update(gauge, value, options):
             gauge._test_value = MIN_TEMP
             temp = gauge._test_value
     else:
-        temp = Temperature.lookup(value, options.get('units', 'f'))
+        temp = Temperature.compute(value, options.get('units', 'f'))
 
     display_temp = '- -'
     lvl_next = -1
