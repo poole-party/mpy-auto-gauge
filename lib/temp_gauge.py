@@ -8,6 +8,8 @@ OP_TEMP_START       = 160
 
 
 def update(gauge, value, options):
+    r = gauge.renderer
+
     if options.get('demo'):
         if not hasattr(gauge, '_test_value'):
             gauge._test_value = 0
@@ -30,7 +32,7 @@ def update(gauge, value, options):
                         ((MAX_TEMP - MIN_TEMP) / (gauge.primary_segments - 1)))
         lvl_next = max(0, min(raw_level, gauge.primary_segments - 1))
 
-    gauge.draw_readout(str(display_temp))
+    r.draw_readout(str(display_temp))
 
     lvl_cur = gauge._temp_level
     n       = gauge.primary_segments
@@ -38,7 +40,7 @@ def update(gauge, value, options):
     if not isinstance(display_temp, int) or temp - MIN_TEMP < 0:
         # Below operating range — show only the first (cold) segment
         for i in range(n):
-            gauge.set_primary_segment(i, i == 0)
+            r.set_primary_segment(i, i == 0)
         lvl_next = -1
 
     elif lvl_next >= lvl_cur:
@@ -52,10 +54,10 @@ def update(gauge, value, options):
                 color_idx = 6
             else:
                 color_idx = gauge.primary_color_index
-            gauge.set_primary_segment(i, True, color_idx)
+            r.set_primary_segment(i, True, color_idx)
 
     else:
         for i in range(lvl_cur, lvl_next, -1):
-            gauge.set_primary_segment(i, False)
+            r.set_primary_segment(i, False)
 
     gauge._temp_level = lvl_next
