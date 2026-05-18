@@ -77,9 +77,17 @@ class GaugeRenderer:
         color = self.palette[self._primary_colors[index]] if visible else st7789.BLACK
         drawing.fill_polygon(self.display, self._primary_polys[index], color)
 
-    def set_secondary_segment(self, index, visible):
+    def set_secondary_segment(self, index, visible, color_index=None):
+        """Show or hide a secondary segment, redrawing only on state change."""
+        if color_index is not None and color_index != self._secondary_colors[index]:
+            self._secondary_colors[index] = color_index
+            if self.secondary_visible[index]:
+                # Force redraw with new colour
+                self.secondary_visible[index] = not visible
+
         if visible == self.secondary_visible[index]:
             return
+
         self.secondary_visible[index] = visible
         color = self.palette[self._secondary_colors[index]] if visible else st7789.BLACK
         drawing.fill_polygon(self.display, self._secondary_polys[index], color)

@@ -1,35 +1,42 @@
-from temperature import Temperature
-
-MAX_TEMP            = 320
-MIN_TEMP            = 120
-DANGER_TEMP_START   = 285
-CAUTION_TEMP_START  = 260
-OP_TEMP_START       = 160
-
-
 def update(gauge, value, options):
-    r = gauge.renderer
+    """Update a bar-style gauge driven by a pre-converted scalar value.
+
+    Reads `gauge.bar_config`:
+        min:            scale minimum
+        max:            scale maximum
+        thresholds:     list of (lower_bound, color_idx), ascending. The
+                        highest bound that the segment's threshold meets
+                        wins. Segments below the lowest bound use
+                        `default_color` (or the gauge's primary colour).
+        default_color:  optional fallback colour index.
+
+    `value` is the live measurement (already in display units). Demo mode
+    ignores it and sweeps `min..max`.
+    """
+    r   = gauge.renderer
+    cfg = gauge.bar_config
+    min_temp      = cfg['min']
+    max_temp      = cfg['max']
+    thresholds    = cfg.get('thresholds', ())
+    default_color = cfg.get('default_color', gauge.primary_color_index)
 
     if options.get('demo'):
         if not hasattr(gauge, '_test_value'):
-            gauge._test_value = 0
-
-        gauge._test_value = (gauge._test_value + 2) % MAX_TEMP
+            gauge._test_value = min_temp
+        gauge._test_value += 2
+        if gauge._test_value > max_temp:
+            gauge._test_value = min_temp
         temp = gauge._test_value
-
-        if temp < MIN_TEMP:
-            gauge._test_value = MIN_TEMP
-            temp = gauge._test_value
     else:
-        temp = Temperature.lookup(value, options.get('units', 'f'))
+        temp = value
 
     display_temp = '- -'
     lvl_next = -1
 
     if isinstance(temp, (int, float)) and temp > 0:
         display_temp = int(temp)
-        raw_level = int((display_temp - MIN_TEMP) /
-                        ((MAX_TEMP - MIN_TEMP) / (gauge.primary_segments - 1)))
+        raw_level = int((display_temp - min_temp) /
+                        ((max_temp - min_temp) / (gauge.primary_segments - 1)))
         lvl_next = max(0, min(raw_level, gauge.primary_segments - 1))
 
     r.draw_readout(str(display_temp))
@@ -37,7 +44,7 @@ def update(gauge, value, options):
     lvl_cur = gauge._temp_level
     n       = gauge.primary_segments
 
-    if not isinstance(display_temp, int) or temp - MIN_TEMP < 0:
+    if not isinstance(display_temp, int) or temp - min_temp < 0:
         # Below operating range — show only the first (cold) segment
         for i in range(n):
             r.set_primary_segment(i, i == 0)
@@ -45,15 +52,11 @@ def update(gauge, value, options):
 
     elif lvl_next >= lvl_cur:
         for i in range(max(lvl_cur + 1, 0), lvl_next + 1):
-            threshold = MIN_TEMP + (MAX_TEMP - MIN_TEMP) / (n - 1) * i
-            if threshold >= DANGER_TEMP_START:
-                color_idx = 15
-            elif threshold >= CAUTION_TEMP_START:
-                color_idx = 12
-            elif threshold >= OP_TEMP_START:
-                color_idx = 6
-            else:
-                color_idx = gauge.primary_color_index
+            threshold = min_temp + (max_temp - min_temp) / (n - 1) * i
+            color_idx = default_color
+            for lower, c in thresholds:
+                if threshold >= lower:
+                    color_idx = c
             r.set_primary_segment(i, True, color_idx)
 
     else:
